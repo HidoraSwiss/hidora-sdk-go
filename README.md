@@ -64,5 +64,3 @@ Organization of the project Hidora SDK in GO
     - [ ] Handling zone
     - [ ] Handling requests to API
 - [ ] Implement validation
-
-## 
