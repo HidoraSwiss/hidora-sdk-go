@@ -27,7 +27,8 @@ const (
 	HIDORA_HOST_URL       string        = "app.hidora.com"
 	HIDORA_CLIENT_TIMEOUT time.Duration = 1800 // 30 minutes
 	HIDORA_API_VERSION    string        = "1.0"
-	HIDORA_DEFAULT_REGION string        = "ch-gen"
+	HIDORA_DEFAULT_REGION HidoraRegion  = RegionChGen
+	HIDORA_DEFAULT_ZONE   HidoraZone    = ZoneChGen1
 )
 
 func defaultparams() *HidoraClient {
@@ -45,7 +46,7 @@ func defaultparams() *HidoraClient {
 		userAgent:       "Golang_Hidora_SDK/" + HIDORA_API_VERSION,
 		defaultEnvGroup: "Hidora_EnvGroup",
 		defaultRegion:   HIDORA_DEFAULT_REGION,
-		defaultZone:     HIDORA_DEFAULT_REGION + "-1",
+		defaultZone:     HIDORA_DEFAULT_ZONE,
 	}
 }
 
@@ -76,8 +77,14 @@ func NewClient(auth HidoraAuth,
 }
 
 // Implement "Get" functions to be used by future projects (like Terraform provider)
-func (s *HidoraClient) GetDefaultEnvGroup() {}
+func (s *HidoraClient) GetDefaultEnvGroup() HidoraEnvGroup {
+	return s.defaultEnvGroup
+}
 
-func (s *HidoraClient) GetDefaultRegion() {}
+func (s *HidoraClient) GetDefaultRegion() HidoraRegion {
+	return s.defaultRegion
+}
 
-func (s *HidoraClient) GetDefaultZone() {}
+func (s *HidoraClient) GetDefaultZone() HidoraZone {
+	return s.defaultZone
+}
