@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,8 +18,16 @@ type HidoraRequest struct {
 	Body    io.Reader
 }
 
+var DEFAULT_HEADERS map[string]string = map[string]string{
+	"Content-Type": "application/x-www-form-urlencoded",
+	"Accept":       "application/json",
+}
+
 // getAllHeaders constructs a http.Header object and aggregates all headers into the object.
-func (req *HidoraRequest) setHeaders(token HidoraAuth, userAgent string, anonymized bool) http.Header {
+// /////////////////////////////////////////////////
+// Finish implementation of function
+// /////////////////////////////////////////////////
+func (req *HidoraRequest) setHeaders(headers map[string]string, userAgent string) http.Header {
 	var allHeaders http.Header
 
 	allHeaders.Set("User-Agent", userAgent)
@@ -31,7 +40,6 @@ func (req *HidoraRequest) setHeaders(token HidoraAuth, userAgent string, anonymi
 			allHeaders.Add(key, v)
 		}
 	}
-
 	return allHeaders
 }
 
@@ -39,7 +47,7 @@ func (req *HidoraRequest) setHeaders(token HidoraAuth, userAgent string, anonymi
 func (req *HidoraRequest) getURL(baseURL string) (*url.URL, error) {
 	url, err := url.Parse(baseURL + req.Path)
 	if err != nil {
-		return nil, errors.New("Invalid url %s: %s", baseURL+req.Path, err)
+		return nil, errors.New(fmt.Sprintf("Invalid base URLurl %s: %s", baseURL+req.Path, err))
 	}
 	url.RawQuery = req.Query.Encode()
 

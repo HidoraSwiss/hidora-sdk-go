@@ -1,8 +1,13 @@
 package hidora
 
 import (
+	"encoding/json"
+	"errors"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -87,4 +92,83 @@ func (s *HidoraClient) GetDefaultRegion() HidoraRegion {
 
 func (s *HidoraClient) GetDefaultZone() HidoraZone {
 	return s.defaultZone
+}
+
+// do performs a single HTTP request based on the ScalewayRequest object.
+// /////////////////////////////////////////////////
+// Finish implementation of function
+// /////////////////////////////////////////////////
+func (c *HidoraClient) do(req *HidoraRequest, res interface{}) (sdkErr error) {
+
+	if req == nil {
+		// Catch with log library
+		return errors.New("Request is nil !")
+	}
+
+	// build url
+	url, sdkErr := req.getURL(c.apiUrl.Host)
+	if sdkErr != nil {
+		return sdkErr
+	}
+	log.Printf("creating %s request on %s", req.Method, url.String())
+
+	// build request
+	httpRequest, err := http.NewRequest(req.Method, url.String(), req.Body)
+	if err != nil {
+		return errors.New("Could not create request")
+	}
+
+	httpRequest.Header = req.setHeaders(req.auth, c.userAgent, false)
+
+	// execute request
+	httpResponse, err := c.httpClient.Do(httpRequest)
+	if err != nil {
+		return errors.Wrap(err, "error executing request")
+	}
+
+	defer func() {
+		closeErr := httpResponse.Body.Close()
+		if sdkErr == nil && closeErr != nil {
+			sdkErr = errors.Wrap(closeErr, "could not close http response")
+		}
+	}()
+
+	sdkErr = hasResponseError(httpResponse)
+	if sdkErr != nil {
+		return sdkErr
+	}
+
+	if res != nil {
+		contentType := httpResponse.Header.Get("Content-Type")
+
+		switch contentType {
+		case "application/json":
+			err = json.NewDecoder(httpResponse.Body).Decode(&res)
+			if err != nil {
+				return errors.Wrap(err, "could not parse %s response body", contentType)
+			}
+		default:
+			buffer, isBuffer := res.(io.Writer)
+			if !isBuffer {
+				return errors.Wrap(err, "could not handle %s response body with %T result type", contentType, buffer)
+			}
+
+			_, err := io.Copy(buffer, httpResponse.Body)
+			if err != nil {
+				return errors.Wrap(err, "could not copy %s response body", contentType)
+			}
+		}
+
+		// Handle instance API X-Total-Count header
+		xTotalCountStr := httpResponse.Header.Get("X-Total-Count")
+		if legacyLister, isLegacyLister := res.(legacyLister); isLegacyLister && xTotalCountStr != "" {
+			xTotalCount, err := strconv.Atoi(xTotalCountStr)
+			if err != nil {
+				return errors.Wrap(err, "could not parse X-Total-Count header")
+			}
+			legacyLister.UnsafeSetTotalCount(xTotalCount)
+		}
+	}
+
+	return nil
 }
