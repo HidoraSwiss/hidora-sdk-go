@@ -3,11 +3,12 @@ package hidora
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,29 +30,29 @@ type HidoraClient struct {
 }
 
 const (
-	HIDORA_HOST_URL       string        = "app.hidora.com"
-	HIDORA_CLIENT_TIMEOUT time.Duration = 1800 // 30 minutes
-	HIDORA_API_VERSION    string        = "1.0"
-	HIDORA_DEFAULT_REGION HidoraRegion  = RegionChGen
-	HIDORA_DEFAULT_ZONE   HidoraZone    = ZoneChGen1
+	hidoraHostUrl       string        = "app.hidora.com"
+	hidoraClientTimeout time.Duration = 1800 // 30 minutes
+	hidoraApiVersion    string        = "1.0"
+	hidoraDefaultRegion HidoraRegion  = RegionChGen
+	hidoraDefaultZone   HidoraZone    = ZoneChGen1
 )
 
 func defaultparams() *HidoraClient {
 	return &HidoraClient{
 		httpClient: &http.Client{
-			Timeout: time.Second * HIDORA_CLIENT_TIMEOUT,
+			Timeout: time.Second * hidoraClientTimeout,
 		},
 		auth: "",
 		apiUrl: &url.URL{
 			Scheme: "https",
-			Host:   HIDORA_HOST_URL,
-			Path:   "/" + HIDORA_API_VERSION + "/",
+			Host:   hidoraHostUrl,
+			Path:   "/" + hidoraApiVersion + "/",
 		},
-		apiVersion:      HIDORA_API_VERSION,
-		userAgent:       "Golang_Hidora_SDK/" + HIDORA_API_VERSION,
+		apiVersion:      hidoraApiVersion,
+		userAgent:       "Golang_Hidora_SDK/" + hidoraApiVersion,
 		defaultEnvGroup: "Hidora_EnvGroup",
-		defaultRegion:   HIDORA_DEFAULT_REGION,
-		defaultZone:     HIDORA_DEFAULT_ZONE,
+		defaultRegion:   hidoraDefaultRegion,
+		defaultZone:     hidoraDefaultZone,
 	}
 }
 
@@ -99,7 +100,6 @@ func (s *HidoraClient) GetDefaultZone() HidoraZone {
 // Finish implementation of function
 // /////////////////////////////////////////////////
 func (c *HidoraClient) do(req *HidoraRequest, res interface{}) (sdkErr error) {
-
 	if req == nil {
 		// Catch with log library
 		return errors.New("Request is nil !")
@@ -115,27 +115,28 @@ func (c *HidoraClient) do(req *HidoraRequest, res interface{}) (sdkErr error) {
 	// build request
 	httpRequest, err := http.NewRequest(req.Method, url.String(), req.Body)
 	if err != nil {
-		return errors.New("Could not create request")
+		return fmt.Errorf("Could not create request, error : %w", err)
 	}
 
-	httpRequest.Header = req.setHeaders(req.auth, c.userAgent, false)
+	httpRequest.Header = req.setHeaders(baseHeaders, c.userAgent)
 
 	// execute request
 	httpResponse, err := c.httpClient.Do(httpRequest)
 	if err != nil {
-		return errors.Wrap(err, "error executing request")
+		return fmt.Errorf("error executing request, error : %w", err)
 	}
 
 	defer func() {
 		closeErr := httpResponse.Body.Close()
 		if sdkErr == nil && closeErr != nil {
-			sdkErr = errors.Wrap(closeErr, "could not close http response")
+			sdkErr = fmt.Errorf(
+				"could not close http response, error : %w",
+				closeErr)
 		}
 	}()
 
-	sdkErr = hasResponseError(httpResponse)
-	if sdkErr != nil {
-		return sdkErr
+	if !strings.HasPrefix(httpResponse.Status, "200") {
+		return fmt.Errorf("Error on response")
 	}
 
 	if res != nil {
@@ -145,30 +146,25 @@ func (c *HidoraClient) do(req *HidoraRequest, res interface{}) (sdkErr error) {
 		case "application/json":
 			err = json.NewDecoder(httpResponse.Body).Decode(&res)
 			if err != nil {
-				return errors.Wrap(err, "could not parse %s response body", contentType)
+				return fmt.Errorf(
+					"could not parse %s response body, error : %w",
+					contentType, err)
 			}
 		default:
 			buffer, isBuffer := res.(io.Writer)
 			if !isBuffer {
-				return errors.Wrap(err, "could not handle %s response body with %T result type", contentType, buffer)
+				return fmt.Errorf(
+					"could not handle %s response body with %T result type, error : %w",
+					contentType, buffer, err)
 			}
 
 			_, err := io.Copy(buffer, httpResponse.Body)
 			if err != nil {
-				return errors.Wrap(err, "could not copy %s response body", contentType)
+				return fmt.Errorf(
+					"could not copy %s response body, error : %w",
+					contentType, err)
 			}
-		}
-
-		// Handle instance API X-Total-Count header
-		xTotalCountStr := httpResponse.Header.Get("X-Total-Count")
-		if legacyLister, isLegacyLister := res.(legacyLister); isLegacyLister && xTotalCountStr != "" {
-			xTotalCount, err := strconv.Atoi(xTotalCountStr)
-			if err != nil {
-				return errors.Wrap(err, "could not parse X-Total-Count header")
-			}
-			legacyLister.UnsafeSetTotalCount(xTotalCount)
 		}
 	}
-
 	return nil
 }

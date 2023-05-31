@@ -18,7 +18,7 @@ type HidoraRequest struct {
 	Body    io.Reader
 }
 
-var DEFAULT_HEADERS map[string]string = map[string]string{
+var baseHeaders map[string]string = map[string]string{
 	"Content-Type": "application/x-www-form-urlencoded",
 	"Accept":       "application/json",
 }
